@@ -1,0 +1,62 @@
+processors:
+- add_cloud_metadata:
+
+setup:
+  kibana:
+    host: "localhost:5601"
+  #install dashboards and templates on kibana side
+  dashboards:
+    enabled: true
+    index: metricbeat-*
+  template:
+    name: metricbeat
+    pattern: metricbeat-*
+
+output.elasticsearch:
+  hosts: ["localhost:9200"]
+  #create index to group data by days
+  index: metricbeat-%{[beat.version]}-%{+yyyy.MM.dd}
+
+metricbeat:
+  config:
+    modules:
+      path: ${path.config}/modules.d/*.yml
+      reload.enabled: false
+  modules:
+  #https://www.elastic.co/guide/en/beats/metricbeat/6.4/metricbeat-module-docker.html
+  #make metricbeat monitor your docker service
+  - module: docker
+    metricsets:
+    - "container"
+    - "cpu"
+    - "diskio"
+    - "healthcheck"
+    - "info"
+    - "image"
+    - "memory"
+    - "network"
+    hosts: ["unix:///var/run/docker.sock"]
+    period: 10s
+    enabled: true
+
+  #https://www.elastic.co/guide/en/beats/metricbeat/6.4/metricbeat-module-system.html
+  # make metricbeat monitor your laptop
+  - module: system
+    metricsets:
+    - cpu             # CPU usage
+    - load            # CPU load averages
+    - memory          # Memory usage
+    - network         # Network IO
+    - process         # Per process metrics
+    - process_summary # Process summary
+    - uptime          # System Uptime
+    - core            # Per CPU core usage
+    - diskio          # Disk IO
+    - filesystem      # File system usage for each mountpoint
+    - fsstat          # File system summary metrics
+    - raid            # Raid
+    - socket          # Sockets and connection info (linux only)
+    enabled: true
+    period: 10s
+    processes: ['.*']
+

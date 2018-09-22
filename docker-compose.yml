@@ -1,0 +1,129 @@
+version: '3'
+
+#create docker volume for keeping elasticsearch data
+volumes:
+  esdata:
+    driver: local
+
+#create network so ELK stack containers can interact with each other
+networks:
+  esnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
+
+#Official ELK docker  documentation https://www.docker.elastic.co
+services:
+  #https://www.elastic.co/guide/en/elasticsearch/reference/6.4/docker.html
+  # Run elasticsearch for store, search, and analyze data
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.4.0
+    hostname: elasticsearch
+    user: root
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      memlock:
+        soft: -1
+        hard: -1
+    environment:
+      discovery.type: 'single-node'
+      bootstrap.memory_lock: 'true'
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      xpack.monitoring.collection.enabled: 'true'
+    ports:
+      - 9200:9200
+    healthcheck:
+      test: "curl localhost:9200"
+    networks:
+      - esnet
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+
+  #https://www.elastic.co/guide/en/kibana/6.4/docker.html
+  #run Kibana for data visualization
+  #Kibana will be accessible at http://localhost:5601
+  kibana:
+      hostname: kibana
+      image: docker.elastic.co/kibana/kibana:6.4.0
+      depends_on:
+        - elasticsearch
+      environment:
+        SERVER_NAME: kibana
+        ELASTICSEARCH_URL: http://elasticsearch:9200
+      ports:
+        - 5601:5601
+      healthcheck:
+        test: "curl localhost:5601"
+      networks:
+       - esnet
+
+  #https://www.elastic.co/guide/en/logstash/current/docker-config.html
+  #run logstash for collecting logs from docker containers
+  #and sending them to elastisearch
+  logstash:
+    image: docker.elastic.co/logstash/logstash:6.4.0
+    hostname: logstash
+    depends_on:
+      - elasticsearch
+    networks:
+      - esnet
+    ports:
+      - 12201:12201/udp
+      - 12201:12201/tcp
+    healthcheck:
+      test: "curl localhost:9600"
+    environment:
+      xpack.monitoring.enabled: 'true'
+    volumes:
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      - ./gelf-index-pattern.json:/usr/share/logstash/pipeline/gelf-index-pattern.json
+
+  #https://www.elastic.co/guide/en/beats/metricbeat/6.4/running-on-docker.html
+  #run Mentricsbeat for collecting metrics from the host and it's Docker service
+  #the metrics will be shown in Kibana dashboard
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:6.4.0
+    user: root
+    hostname: mentricbeat
+    depends_on:
+      - kibana
+      - elasticsearch
+    restart: unless-stopped
+    #why network host?
+    #because it needs to monitor network of your laptop instead of docker one.
+    network_mode: host
+    volumes:
+    - ./metricbeat.yml:/usr/share/metricbeat/metricbeat.yml
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    #mount host fs so Metricbeat is able to access it from it's container
+    - /:/hostfs:ro
+    command:
+    - bash
+    - -c
+    #fix config file permissions as metricbeat requires
+    - >
+      chown root.root /usr/share/metricbeat/metricbeat.yml &&
+      chmod 600 /usr/share/metricbeat/metricbeat.yml &&
+      metricbeat -system.hostfs=/hostfs
+
+  #run a container for only generating test logs
+  #and send them to gelf logstash interface
+  test-logs:
+    image: alpine
+    depends_on:
+      - logstash
+    command:
+    - sh
+    - -c
+    - while true; do printf test-logs:; date; sleep 10; done
+    restart: unless-stopped
+    logging:
+      driver: gelf
+      options:
+        gelf-address: "udp://localhost:12201"
+
+
+
