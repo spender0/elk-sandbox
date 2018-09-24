@@ -1,7 +1,7 @@
 # ELK sandbox
 ### Run ELK on your laptop.
 ### Get your ELK stack with only one 'docker-compose up' cmd
-![alt text](https://lh5.googleusercontent.com/Bg7Zy2Lu0Qj7v4FvIKGqytFx1UlDx0IDwccLCQWAsHZ55qnRRvKLNEzPynjZu41ZfKgJx6rq-VwrXN2B0m1w=w1366-h675-rw)
+![alt text](https://github.com/spender0/elk-sandbox/raw/master/elk-sandbox.jpg)
 
 ### Features:
 * Best for ELK studying, configuration testing and experiments.
