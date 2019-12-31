@@ -11,14 +11,14 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.19.0.0/16
+        - subnet: 172.19.1.0/24
 
 #Official ELK docker  documentation https://www.docker.elastic.co
 services:
   #https://www.elastic.co/guide/en/elasticsearch/reference/6.4/docker.html
   # Run elasticsearch for store, search, and analyze data
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:6.4.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.5.1
     hostname: elasticsearch
     user: root
     ulimits:
@@ -29,6 +29,7 @@ services:
         soft: -1
         hard: -1
     environment:
+      SERVER_NAME: elasticsearch
       discovery.type: 'single-node'
       bootstrap.memory_lock: 'true'
       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
@@ -47,7 +48,7 @@ services:
   #Kibana will be accessible at http://localhost:5601
   kibana:
       hostname: kibana
-      image: docker.elastic.co/kibana/kibana:6.4.0
+      image: docker.elastic.co/kibana/kibana:7.5.1
       depends_on:
         - elasticsearch
       environment:
@@ -64,7 +65,7 @@ services:
   #run logstash for collecting logs from docker containers
   #and sending them to elastisearch
   logstash:
-    image: docker.elastic.co/logstash/logstash:6.4.0
+    image: docker.elastic.co/logstash/logstash:7.5.1
     hostname: logstash
     depends_on:
       - elasticsearch
@@ -79,13 +80,12 @@ services:
       xpack.monitoring.enabled: 'true'
     volumes:
       - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
-      - ./gelf-index-pattern.json:/usr/share/logstash/pipeline/gelf-index-pattern.json
 
   #https://www.elastic.co/guide/en/beats/metricbeat/6.4/running-on-docker.html
   #run Mentricsbeat for collecting metrics from the host and it's Docker service
   #the metrics will be shown in Kibana dashboard
   metricbeat:
-    image: docker.elastic.co/beats/metricbeat:6.4.0
+    image: docker.elastic.co/beats/metricbeat:7.5.1
     user: root
     hostname: mentricbeat
     depends_on:
