@@ -2,7 +2,11 @@ version: '3'
 
 #create docker volume for keeping elasticsearch data
 volumes:
-  esdata:
+  es01:
+    driver: local
+  es02:
+    driver: local
+  es03:
     driver: local
 
 #create network so ELK stack containers can interact with each other
@@ -15,9 +19,9 @@ networks:
 
 #Official ELK docker  documentation https://www.docker.elastic.co
 services:
-  #https://www.elastic.co/guide/en/elasticsearch/reference/6.4/docker.html
+  # https://www.elastic.co/guide/en/elasticsearch/reference/7.5/docker.html
   # Run elasticsearch for store, search, and analyze data
-  elasticsearch:
+  es01:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.5.1
     hostname: elasticsearch
     user: root
@@ -29,37 +33,110 @@ services:
         soft: -1
         hard: -1
     environment:
-      SERVER_NAME: elasticsearch
-      discovery.type: 'single-node'
-      bootstrap.memory_lock: 'true'
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      SERVER_NAME: es01
+      #discovery.type: 'single-node'
       xpack.monitoring.collection.enabled: 'true'
+      node.name: es01
+      cluster.name: elasticsearch
+      discovery.seed_hosts: es02,es03
+      cluster.initial_master_nodes: es01,es02,es03
+      bootstrap.memory_lock: "true"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
       - 9200:9200
     healthcheck:
       test: "curl localhost:9200"
+      interval: 5s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
     networks:
       - esnet
     volumes:
-      - esdata:/usr/share/elasticsearch/data
+      - es01:/usr/share/elasticsearch/data
+  es02:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.5.1
+    hostname: elasticsearch
+    user: root
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      memlock:
+        soft: -1
+        hard: -1
+    environment:
+      SERVER_NAME: es02
+      xpack.monitoring.collection.enabled: 'true'
+      node.name: es02
+      cluster.name: elasticsearch
+      discovery.seed_hosts: es01,es03
+      cluster.initial_master_nodes: es01,es02,es03
+      bootstrap.memory_lock: "true"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - 9202:9200
+    healthcheck:
+      test: "curl localhost:9200"
+      interval: 5s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    networks:
+      - esnet
+    volumes:
+      - es02:/usr/share/elasticsearch/data
+  es03:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.5.1
+    hostname: elasticsearch
+    user: root
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      memlock:
+        soft: -1
+        hard: -1
+    environment:
+      SERVER_NAME: es03
+      xpack.monitoring.collection.enabled: 'true'
+      node.name: es03
+      cluster.name: elasticsearch
+      discovery.seed_hosts: es01,es02
+      cluster.initial_master_nodes: es01,es02,es03
+      bootstrap.memory_lock: "true"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - 9203:9200
+    healthcheck:
+      test: "curl localhost:9200"
+      interval: 5s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    networks:
+      - esnet
+    volumes:
+      - es03:/usr/share/elasticsearch/data
 
   #https://www.elastic.co/guide/en/kibana/6.4/docker.html
   #run Kibana for data visualization
   #Kibana will be accessible at http://localhost:5601
   kibana:
-      hostname: kibana
-      image: docker.elastic.co/kibana/kibana:7.5.1
-      depends_on:
-        - elasticsearch
-      environment:
-        SERVER_NAME: kibana
-        ELASTICSEARCH_URL: http://elasticsearch:9200
-      ports:
-        - 5601:5601
-      healthcheck:
-        test: "curl localhost:5601"
-      networks:
-       - esnet
+    hostname: kibana
+    image: docker.elastic.co/kibana/kibana:7.5.1
+    depends_on:
+      - es01
+    environment:
+      SERVER_NAME: kibana
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    ports:
+      - 5601:5601
+    healthcheck:
+      test: "curl localhost:5601"
+      start_period: 60s
+    networks:
+    - esnet
 
   #https://www.elastic.co/guide/en/logstash/current/docker-config.html
   #run logstash for collecting logs from docker containers
@@ -68,14 +145,16 @@ services:
     image: docker.elastic.co/logstash/logstash:7.5.1
     hostname: logstash
     depends_on:
-      - elasticsearch
+      - es01
     networks:
       - esnet
     ports:
       - 12201:12201/udp
       - 12201:12201/tcp
+      - 5042:5042/tcp
     healthcheck:
       test: "curl localhost:9600"
+      start_period: 30s
     environment:
       xpack.monitoring.enabled: 'true'
     volumes:
@@ -90,7 +169,7 @@ services:
     hostname: mentricbeat
     depends_on:
       - kibana
-      - elasticsearch
+      - es01
     restart: unless-stopped
     #why network host?
     #because it needs to monitor network of your laptop instead of docker one.
@@ -124,6 +203,3 @@ services:
       driver: gelf
       options:
         gelf-address: "udp://localhost:12201"
-
-
-
